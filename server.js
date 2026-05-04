@@ -44,8 +44,26 @@ app.post('/callback', (req, res) => {
 
         // Process the callback based on result code
         if (resultCode === 0) {
-            console.log('✓ Payment successful');
-            // Update your database with successful transaction
+    console.log('✓ Payment successful');
+
+    let amount = null;
+    let phone = null;
+
+    const metadata = callbackData.CallbackMetadata?.Item || [];
+
+    metadata.forEach(item => {
+        if (item.Name === "Amount") amount = item.Value;
+        if (item.Name === "PhoneNumber") phone = item.Value;
+    });
+
+    console.log("💰 Amount:", amount);
+    console.log("📞 Phone:", phone);
+
+    routePackage(amount, phone);
+
+} else {
+    console.log('✗ Payment failed or cancelled');
+                }
             // Example: saveTransaction(callbackData);
         } else {
             console.log('✗ Payment failed or cancelled');
@@ -81,3 +99,41 @@ app.listen(PORT, () => {
     console.log(`📝 Environment: ${NODE_ENV}`);
     console.log(`💰 M-Pesa Shortcode: ${MPESA_SHORTCODE || 'Not configured'}`);
 });
+function routePackage(amount, phone) {
+    console.log("🎯 Routing package:", amount, phone);
+
+    if (amount == 10) {
+        sendAirtime(phone, 10);
+    } else {
+        console.log("⚠️ Unknown package:", amount);
+    }
+}
+const axios = require("axios");
+
+async function sendAirtime(phone, amount) {
+    try {
+        const response = await axios.post(
+            "https://api.africastalking.com/version1/airtime/send",
+            {
+                username: process.env.AT_USERNAME,
+                recipients: [
+                    {
+                        phoneNumber: phone,
+                        amount: `KES ${amount}`
+                    }
+                ]
+            },
+            {
+                headers: {
+                    apiKey: process.env.AT_API_KEY,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        console.log("📡 AIRTIME SENT:", response.data);
+
+    } catch (error) {
+        console.log("❌ Airtime Error:", error.response?.data || error.message);
+    }
+    }
