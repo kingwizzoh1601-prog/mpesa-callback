@@ -102,7 +102,7 @@ app.listen(PORT, () => {
 function routePackage(amount, phone) {
     console.log("🎯 Routing package:", amount, phone);
 
-    if (amount == 10) {
+    if (amount == 1) {
         sendAirtime(phone, 10);
     } else {
         console.log("⚠️ Unknown package:", amount);
