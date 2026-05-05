@@ -85,9 +85,14 @@ function routePackage(amount, phone) {
 // 📡 AIRTIME FUNCTION
 async function sendAirtime(phone, amount) {
     try {
-        const response = await axios.post(
-            "https://api.africastalking.com/version1/airtime/send",
-            {
+        const response = await axios({
+            method: "POST",
+            url: "https://api.africastalking.com/version1/airtime/send",
+            headers: {
+                apiKey: process.env.AT_API_KEY,
+                "Content-Type": "application/json"
+            },
+            data: {
                 username: process.env.AT_USERNAME,
                 recipients: [
                     {
@@ -95,25 +100,12 @@ async function sendAirtime(phone, amount) {
                         amount: `KES ${amount}`
                     }
                 ]
-            },
-            {
-                headers: {
-                    apiKey: process.env.AT_API_KEY,
-                    "Content-Type": "application/json"
-                }
             }
-        );
+        });
 
         console.log("📡 AIRTIME SENT:", response.data);
 
     } catch (error) {
         console.log("❌ Airtime Error:", error.response?.data || error.message);
     }
-}
-
-// Start server
-app.listen(PORT, () => {
-    console.log(`🚀 Server is listening on port ${PORT}`);
-    console.log(`📝 Environment: ${NODE_ENV}`);
-    console.log(`💰 M-Pesa Shortcode: ${MPESA_SHORTCODE || 'Not configured'}`);
-});
+        }
