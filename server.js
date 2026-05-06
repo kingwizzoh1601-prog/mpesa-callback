@@ -12,7 +12,9 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // Middleware
 app.use(express.json());
 
-// Health check
+// ======================
+// HEALTH CHECK
+// ======================
 app.get('/', (req, res) => {
     res.status(200).json({
         status: 'Server is running',
@@ -21,7 +23,9 @@ app.get('/', (req, res) => {
     });
 });
 
-// ✅ CLEAN CALLBACK (FIXED)
+// ======================
+// CALLBACK ENDPOINT
+// ======================
 app.post('/callback', (req, res) => {
     try {
         console.log('=== M-Pesa Callback Received ===');
@@ -31,8 +35,10 @@ app.post('/callback', (req, res) => {
         const callbackData = req.body.Body?.stkCallback;
 
         const resultCode = callbackData?.ResultCode;
+        const resultDesc = callbackData?.ResultDesc;
 
         console.log('Result Code:', resultCode);
+        console.log('Result Description:', resultDesc);
 
         if (resultCode === 0) {
             console.log('✓ Payment successful');
@@ -71,7 +77,9 @@ app.post('/callback', (req, res) => {
     }
 });
 
-// 🎯 ROUTER
+// ======================
+// PACKAGE ROUTER
+// ======================
 function routePackage(amount, phone) {
     console.log("🎯 Routing package:", amount, phone);
 
@@ -82,7 +90,9 @@ function routePackage(amount, phone) {
     }
 }
 
-// 📡 AIRTIME FUNCTION
+// ======================
+// AIRTIME SENDER
+// ======================
 async function sendAirtime(phone, amount) {
     try {
         const response = await axios({
@@ -90,17 +100,17 @@ async function sendAirtime(phone, amount) {
             url: "https://api.africastalking.com/version1/airtime/send",
             headers: {
                 apiKey: process.env.AT_API_KEY,
-                "Content-Type": "application/json"
+                "Content-Type": "application/x-www-form-urlencoded"
             },
-            data: {
+            data: new URLSearchParams({
                 username: process.env.AT_USERNAME,
-                recipients: [
+                recipients: JSON.stringify([
                     {
                         phoneNumber: phone,
                         amount: `KES ${amount}`
                     }
-                ]
-            }
+                ])
+            })
         });
 
         console.log("📡 AIRTIME SENT:", response.data);
@@ -108,4 +118,13 @@ async function sendAirtime(phone, amount) {
     } catch (error) {
         console.log("❌ Airtime Error:", error.response?.data || error.message);
     }
-                         }
+}
+
+// ======================
+// SERVER START
+// ======================
+app.listen(PORT, () => {
+    console.log(`🚀 Server is listening on port ${PORT}`);
+    console.log(`📝 Environment: ${NODE_ENV}`);
+    console.log(`💰 M-Pesa Shortcode: ${MPESA_SHORTCODE || 'Not configured'}`);
+});
