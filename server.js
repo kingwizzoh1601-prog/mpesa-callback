@@ -3,76 +3,52 @@ const axios = require("axios");
 
 const app = express();
 
-// ======================
-// ENV CONFIG
-// ======================
 const PORT = process.env.PORT || 3000;
-const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
-const MPESA_SECRET = process.env.MPESA_SECRET;
-const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// ======================
-// PRICING TABLE (PRODUCT ENGINE)
-// ======================
-const PRODUCTS = {
-    19: { type: "data", value: "1GB (1hr)" },
-    24: { type: "data", value: "250MB (24hrs)" },
-    49: { type: "data", value: "350MB (7 days)" },
-    50: { type: "data", value: "1.5GB (3hrs)" },
-    55: { type: "data", value: "1.25GB (Till Midnight)" },
-    99: { type: "data", value: "1GB (24hrs)" },
-    300: { type: "data", value: "2.5GB (7 days)" },
-    700: { type: "data", value: "6GB (7 days)" },
-
-    22: { type: "data", value: "1GB (1hr)" },
-    52: { type: "data", value: "1.5GB (3hrs)" },
-    100: { type: "data", value: "2GB (24hrs)" },
-
-    23: { type: "minutes", value: "45 mins (3hrs)" },
-    51: { type: "minutes", value: "50 mins (Till Midnight)" },
-    500: { type: "minutes", value: "300 mins (30 days)" },
-    999: { type: "minutes", value: "800 mins (30 days)" },
-    1001: { type: "combo", value: "8GB + 400 mins (30 days)" },
-
-    5: { type: "sms", value: "20 SMS (24hrs)" },
-    10: { type: "sms", value: "200 SMS (24hrs)" },
-    30: { type: "sms", value: "1000 SMS (7 days)" }
-};
-
-// ======================
-// MIDDLEWARE
-// ======================
 app.use(express.json());
 
-// ======================
-// HEALTH CHECK
-// ======================
-app.get('/', (req, res) => {
-    res.status(200).json({
-        status: 'Server is running',
-        environment: NODE_ENV,
-        timestamp: new Date().toISOString()
-    });
-});
+/* =========================
+   🧠 PRICING ENGINE
+========================= */
+const PRICING_ENGINE = {
+    19:  { category: "data", name: "1GB 1 Hour", validity: "1h", value: "1GB" },
+    50:  { category: "data", name: "1.5GB 3 Hours", validity: "3h", value: "1.5GB" },
+    55:  { category: "data", name: "1.25GB Till Midnight", validity: "midnight", value: "1.25GB" },
+    24:  { category: "data", name: "250MB 24 Hours", validity: "24h", value: "250MB" },
+    99:  { category: "data", name: "1GB 24 Hours", validity: "24h", value: "1GB" },
+    49:  { category: "data", name: "350MB 7 Days", validity: "7d", value: "350MB" },
+    300: { category: "data", name: "2.5GB 7 Days", validity: "7d", value: "2.5GB" },
+    700: { category: "data", name: "6GB 7 Days", validity: "7d", value: "6GB" },
 
-// ======================
-// CALLBACK (M-PESA)
-// ======================
-app.post('/callback', (req, res) => {
+    23:  { category: "minutes", name: "45 Minutes", validity: "3h", value: "45min" },
+    51:  { category: "minutes", name: "50 Minutes Till Midnight", validity: "midnight", value: "50min" },
+    500: { category: "minutes", name: "300 Minutes 30 Days", validity: "30d", value: "300min" },
+    999: { category: "minutes", name: "800 Minutes 30 Days", validity: "30d", value: "800min" },
+
+    1001:{ category: "combo", name: "8GB + 400 Minutes", validity: "30d", value: "bundle" },
+
+    22:  { category: "data", name: "1GB Tunukiwa", validity: "1h", value: "1GB" },
+    52:  { category: "data", name: "1.5GB Tunukiwa", validity: "3h", value: "1.5GB" },
+    100: { category: "data", name: "2GB Tunukiwa", validity: "24h", value: "2GB" },
+
+    5:   { category: "sms", name: "20 SMS", validity: "24h", value: "20sms" },
+    10:  { category: "sms", name: "200 SMS", validity: "24h", value: "200sms" },
+    30:  { category: "sms", name: "1000 SMS", validity: "7d", value: "1000sms" }
+};
+
+/* =========================
+   🚀 CALLBACK HANDLER
+========================= */
+app.post('/callback', async (req, res) => {
     try {
-        console.log('=== M-Pesa Callback Received ===');
-        console.log('Timestamp:', new Date().toISOString());
-        console.log('Request Body:', JSON.stringify(req.body, null, 2));
-
         const callbackData = req.body.Body?.stkCallback;
-
         const resultCode = callbackData?.ResultCode;
 
-        console.log('Result Code:', resultCode);
+        console.log("=== CALLBACK RECEIVED ===");
+        console.log(JSON.stringify(req.body, null, 2));
 
         if (resultCode === 0) {
-            console.log('✓ Payment successful');
 
             let amount = null;
             let phone = null;
@@ -87,81 +63,91 @@ app.post('/callback', (req, res) => {
             console.log("💰 Amount:", amount);
             console.log("📞 Phone:", phone);
 
-            routePackage(amount, phone);
+            await routePackage(amount, phone);
 
         } else {
-            console.log('✗ Payment failed or cancelled');
+            console.log("❌ Payment failed or cancelled");
         }
 
-        res.status(200).json({
-            ResultCode: 0,
-            ResultDesc: 'Callback processed successfully'
-        });
+        res.json({ success: true });
 
-    } catch (error) {
-        console.error('❌ Error processing callback:', error);
-
-        res.status(500).json({
-            ResultCode: 1,
-            ResultDesc: 'Internal server error'
-        });
+    } catch (err) {
+        console.log("Callback error:", err.message);
+        res.status(500).json({ error: "server error" });
     }
 });
 
-// ======================
-// ROUTER ENGINE
-// ======================
-function routePackage(amount, phone) {
-    console.log("🎯 Routing package:", amount, phone);
+/* =========================
+   🎯 ROUTER ENGINE
+========================= */
+async function routePackage(amount, phone) {
 
-    const product = PRODUCTS[amount];
+    const pkg = PRICING_ENGINE[amount];
 
-    if (!product) {
+    if (!pkg) {
         console.log("⚠️ Unknown package:", amount);
         return;
     }
 
-    console.log("📦 Selected product:", product);
+    console.log("📦 PACKAGE:", pkg);
 
-    // TEMP DELIVERY (we upgrade later to real APIs)
-    sendAirtime(phone, amount);
-}
+    switch (pkg.category) {
 
-// ======================
-// AIRTIME SENDER (PLACEHOLDER)
-// ======================
-async function sendAirtime(phone, amount) {
-    try {
-        const response = await axios({
-            method: "POST",
-            url: "https://api.africastalking.com/version1/airtime/send",
-            headers: {
-                apiKey: process.env.AT_API_KEY,
-                "Content-Type": "application/x-www-form-urlencoded"
-            },
-            data: new URLSearchParams({
-                username: process.env.AT_USERNAME,
-                recipients: JSON.stringify([
-                    {
-                        phoneNumber: phone,
-                        amount: `KES ${amount}`
-                    }
-                ])
-            })
-        });
+        case "data":
+            await sendData(phone, pkg);
+            break;
 
-        console.log("📡 AIRTIME SENT:", response.data);
+        case "minutes":
+            await sendMinutes(phone, pkg);
+            break;
 
-    } catch (error) {
-        console.log("❌ Airtime Error:", error.response?.data || error.message);
+        case "sms":
+            await sendSms(phone, pkg);
+            break;
+
+        case "combo":
+            await sendCombo(phone, pkg);
+            break;
     }
 }
 
-// ======================
-// START SERVER
-// ======================
+/* =========================
+   📦 BUNDLE EXECUTION (MOCK)
+========================= */
+function sendData(phone, pkg) {
+    console.log(`📶 DATA SENT to ${phone}`);
+    console.log(`👉 ${pkg.name}`);
+}
+
+function sendMinutes(phone, pkg) {
+    console.log(`📞 MINUTES SENT to ${phone}`);
+    console.log(`👉 ${pkg.name}`);
+}
+
+function sendSms(phone, pkg) {
+    console.log(`✉️ SMS SENT to ${phone}`);
+    console.log(`👉 ${pkg.name}`);
+}
+
+function sendCombo(phone, pkg) {
+    console.log(`🔥 COMBO SENT to ${phone}`);
+    console.log(`👉 ${pkg.name}`);
+}
+
+/* =========================
+   🩺 HEALTH CHECK
+========================= */
+app.get('/', (req, res) => {
+    res.json({
+        status: "running",
+        env: NODE_ENV,
+        time: new Date().toISOString()
+    });
+});
+
+/* =========================
+   🚀 START SERVER
+========================= */
 app.listen(PORT, () => {
-    console.log(`🚀 Server is listening on port ${PORT}`);
-    console.log(`📝 Environment: ${NODE_ENV}`);
-    console.log(`💰 M-Pesa Shortcode: ${MPESA_SHORTCODE || 'Not configured'}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
